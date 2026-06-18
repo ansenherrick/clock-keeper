@@ -44,9 +44,12 @@ npm start
 
 ### Environment variables
 
-Add these in Vercel Project Settings:
+Add one of these Postgres connection variables in Vercel Project Settings:
 
 - `DATABASE_URL`
+- `POSTGRES_URL`
+- `POSTGRES_PRISMA_URL`
+- `POSTGRES_URL_NON_POOLING`
 - `SESSION_COOKIE_NAME` optional, defaults to `clock_keeper_session`
 - `SESSION_TTL_SECONDS` optional, defaults to `2592000`
 

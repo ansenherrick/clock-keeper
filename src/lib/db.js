@@ -1,9 +1,15 @@
 const { Pool } = require('pg');
 
-const DATABASE_URL = process.env.DATABASE_URL;
+const DATABASE_URL =
+  process.env.DATABASE_URL ||
+  process.env.POSTGRES_URL ||
+  process.env.POSTGRES_PRISMA_URL ||
+  process.env.POSTGRES_URL_NON_POOLING;
 
 if (!DATABASE_URL) {
-  throw new Error('DATABASE_URL is required. Add it to your local .env or Vercel environment variables.');
+  throw new Error(
+    'A Postgres connection string is required. Set DATABASE_URL or connect a Vercel Marketplace Postgres integration that provides POSTGRES_URL.',
+  );
 }
 
 const pool = new Pool({
