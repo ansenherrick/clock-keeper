@@ -4,7 +4,7 @@ const state = {
   authTab: "signin",
   settingsOpen: false,
   timers: {
-    shift: null,
+    ui: null,
     notes: null,
   },
   statusMessages: {
@@ -28,7 +28,9 @@ const elements = {
   welcomeHeading: document.getElementById("welcomeHeading"),
   settingsToggle: document.getElementById("settingsToggle"),
   settingsDrawer: document.getElementById("settingsDrawer"),
+  settingsScrim: document.getElementById("settingsScrim"),
   closeSettingsBtn: document.getElementById("closeSettingsBtn"),
+  openHistoryBtn: document.getElementById("openHistoryBtn"),
   logoutBtn: document.getElementById("logoutBtn"),
   profileSummary: document.getElementById("profileSummary"),
   googleStatus: document.getElementById("googleStatus"),
@@ -37,12 +39,17 @@ const elements = {
   statusPill: document.getElementById("statusPill"),
   statusHeadline: document.getElementById("statusHeadline"),
   statusSubtext: document.getElementById("statusSubtext"),
+  clockReadouts: Array.from(document.querySelectorAll("[data-clock-readout]")),
+  clockFaces: Array.from(document.querySelectorAll("[data-clock-face]")),
   currentShiftDuration: document.getElementById("currentShiftDuration"),
   currentBreakDuration: document.getElementById("currentBreakDuration"),
   clockInBtn: document.getElementById("clockInBtn"),
   clockOutBtn: document.getElementById("clockOutBtn"),
+  secondaryActions: document.querySelector(".secondary-actions"),
   breakButtons: Array.from(document.querySelectorAll(".break-btn")),
   endBreakBtn: document.getElementById("endBreakBtn"),
+  notesPanel: document.getElementById("notesPanel"),
+  recentPanel: document.getElementById("recentPanel"),
   shiftNotes: document.getElementById("shiftNotes"),
   shiftTimeline: document.getElementById("shiftTimeline"),
   unexportedList: document.getElementById("unexportedList"),
@@ -65,6 +72,7 @@ bootstrap();
 
 async function bootstrap() {
   bindEvents();
+  startUiTicker();
   await refreshSession();
   render();
 }
@@ -83,12 +91,20 @@ function bindEvents() {
   elements.authForms.signup.addEventListener("submit", handleSignup);
   elements.settingsToggle.addEventListener("click", () => toggleSettings(true));
   elements.closeSettingsBtn.addEventListener("click", () => toggleSettings(false));
+  elements.settingsScrim.addEventListener("click", () => toggleSettings(false));
+  elements.openHistoryBtn.addEventListener("click", () => toggleSettings(true));
   elements.logoutBtn.addEventListener("click", handleLogout);
   elements.clockInBtn.addEventListener("click", handleClockIn);
   elements.clockOutBtn.addEventListener("click", handleClockOut);
   elements.endBreakBtn.addEventListener("click", handleEndBreak);
-  elements.selectUnexportedBtn.addEventListener("click", () => selectVisibleEntries(elements.unexportedList, true));
-  elements.exportSelectedBtn.addEventListener("click", () => exportSelectedEntries(elements.unexportedList, "initial-export", "export"));
+
+  if (elements.selectUnexportedBtn) {
+    elements.selectUnexportedBtn.addEventListener("click", () => selectVisibleEntries(elements.unexportedList, true));
+  }
+  if (elements.exportSelectedBtn) {
+    elements.exportSelectedBtn.addEventListener("click", () => exportSelectedEntries(elements.unexportedList, "initial-export", "export"));
+  }
+
   elements.settingsSelectUnexportedBtn.addEventListener("click", () => selectVisibleEntries(elements.settingsUnexportedList, true));
   elements.settingsExportSelectedBtn.addEventListener("click", () => exportSelectedEntries(elements.settingsUnexportedList, "initial-export", "settingsExport"));
   elements.selectReexportBtn.addEventListener("click", () => selectVisibleEntries(elements.historyList, false));
@@ -98,6 +114,12 @@ function bindEvents() {
 
   elements.breakButtons.forEach((button) => {
     button.addEventListener("click", () => handleStartBreak(button.dataset.breakType));
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && state.settingsOpen) {
+      toggleSettings(false);
+    }
   });
 
   if (elements.googleLinkBtn) {
@@ -187,7 +209,7 @@ async function handleLogout() {
     // Logout should still clear local UI state even if the request fails.
   }
 
-  stopAllTimers();
+  cancelPendingNotesSave();
   state.currentUser = null;
   state.shifts = [];
   state.settingsOpen = false;
@@ -229,6 +251,7 @@ async function handleClockOut() {
       body: { notes: elements.shiftNotes.value.trim() },
     });
     state.shifts = response.shifts;
+    clearFeedbackMessages();
     render();
   } catch (error) {
     state.statusMessages.export = error.message;
@@ -250,6 +273,7 @@ async function handleStartBreak(type) {
       body: { type },
     });
     state.shifts = response.shifts;
+    clearFeedbackMessages();
     render();
   } catch (error) {
     state.statusMessages.export = error.message;
@@ -271,6 +295,7 @@ async function handleEndBreak() {
       method: "POST",
     });
     state.shifts = response.shifts;
+    clearFeedbackMessages();
     render();
   } catch (error) {
     state.statusMessages.export = error.message;
@@ -291,7 +316,7 @@ function scheduleShiftNotesSave(event) {
         body: { notes: nextNotes },
       });
       state.shifts = response.shifts;
-      renderTimeline(state.currentUser);
+      renderRecentTimeline();
       renderHistoryList();
     } catch {
       // Leave the current draft in the field. The user can still clock out and save notes then.
@@ -333,11 +358,11 @@ function render() {
   document.body.classList.remove("status-off", "status-on", "status-break");
 
   renderAuthTabs();
+  updateClockFaces();
 
   if (!isAuthenticated) {
     document.body.classList.add("status-off");
     toggleSettings(false);
-    stopClockTicker();
     renderMessages();
     return;
   }
@@ -346,7 +371,6 @@ function render() {
   renderDashboard(state.currentUser);
   renderSettings();
   renderMessages();
-  startClockTicker();
 }
 
 function renderAuthTabs() {
@@ -369,14 +393,24 @@ function renderDashboard(currentUser) {
     elements.currentShiftDuration.textContent = "00:00";
     elements.currentBreakDuration.textContent = "00:00";
     elements.shiftNotes.value = "";
+    elements.notesPanel.classList.add("hidden");
+    elements.recentPanel.classList.remove("hidden");
+    elements.clockInBtn.classList.remove("hidden");
+    elements.clockOutBtn.classList.add("hidden");
+    elements.secondaryActions.classList.add("hidden");
   } else if (openBreak) {
     document.body.classList.add("status-break");
-    elements.statusPill.textContent = `On ${openBreak.type.toLowerCase()} break`;
+    elements.statusPill.textContent = `${openBreak.type} break`;
     elements.statusHeadline.textContent = "Break in progress";
     elements.statusSubtext.textContent = `Started ${formatDateTime(openBreak.startAt)}.`;
     elements.currentShiftDuration.textContent = formatDuration(calculateShiftWorkedMinutes(activeShift));
     elements.currentBreakDuration.textContent = formatDuration(calculateBreakMinutes(activeShift));
     elements.shiftNotes.value = activeShift.notes || "";
+    elements.notesPanel.classList.remove("hidden");
+    elements.recentPanel.classList.add("hidden");
+    elements.clockInBtn.classList.add("hidden");
+    elements.clockOutBtn.classList.remove("hidden");
+    elements.secondaryActions.classList.remove("hidden");
   } else {
     document.body.classList.add("status-on");
     elements.statusPill.textContent = "Clocked in";
@@ -385,6 +419,11 @@ function renderDashboard(currentUser) {
     elements.currentShiftDuration.textContent = formatDuration(calculateShiftWorkedMinutes(activeShift));
     elements.currentBreakDuration.textContent = formatDuration(calculateBreakMinutes(activeShift));
     elements.shiftNotes.value = activeShift.notes || "";
+    elements.notesPanel.classList.remove("hidden");
+    elements.recentPanel.classList.add("hidden");
+    elements.clockInBtn.classList.add("hidden");
+    elements.clockOutBtn.classList.remove("hidden");
+    elements.secondaryActions.classList.remove("hidden");
   }
 
   elements.clockInBtn.disabled = Boolean(activeShift);
@@ -393,49 +432,43 @@ function renderDashboard(currentUser) {
     button.disabled = !activeShift || Boolean(openBreak);
   });
   elements.endBreakBtn.disabled = !openBreak;
+  elements.endBreakBtn.classList.toggle("hidden", !openBreak);
 
-  renderTimeline(currentUser);
+  renderRecentTimeline(currentUser);
   renderUnexportedList(currentUser);
   renderHistoryList();
 }
 
-function renderTimeline(currentUser) {
+function renderRecentTimeline() {
   elements.shiftTimeline.innerHTML = "";
+  const completedShifts = state.shifts.filter((shift) => Boolean(shift.clockOutAt)).slice(0, 2);
 
-  if (!state.shifts.length) {
-    elements.shiftTimeline.appendChild(cloneEmptyState());
+  if (!completedShifts.length) {
+    elements.shiftTimeline.appendChild(cloneEmptyState("No completed shifts yet."));
     return;
   }
 
-  state.shifts.slice(0, 8).forEach((shift) => {
+  completedShifts.forEach((shift) => {
     const card = document.createElement("article");
     card.className = "timeline-card";
-    const status = getShiftStatus(shift);
-    const breaks = shift.breaks.length
-      ? shift.breaks.map((item) => `${item.type}: ${formatTime(item.startAt)}-${item.endAt ? formatTime(item.endAt) : "Now"}`).join(" | ")
-      : "No breaks logged";
-
     card.innerHTML = `
       <div class="entry-topline">
         <div>
           <div class="entry-title">${formatCalendarDate(shift.clockInAt)}</div>
-          <div class="entry-meta">${formatTime(shift.clockInAt)} to ${shift.clockOutAt ? formatTime(shift.clockOutAt) : "Now"}</div>
+          <div class="entry-meta">${formatTime(shift.clockInAt)} - ${formatTime(shift.clockOutAt)}</div>
         </div>
-        <span class="status-tag ${status.tagClass}">${status.label}</span>
+        <span class="status-tag tag-success">Done</span>
       </div>
-      <p class="entry-meta">Worked ${formatHours(calculateShiftWorkedMinutes(shift))} hours | Breaks ${formatHours(calculateBreakMinutes(shift))} hours</p>
-      <p class="entry-note">${escapeHtml(breaks)}</p>
-      <p class="export-hint">${buildExportHint(shift, currentUser)}</p>
+      <p class="entry-meta">Worked ${formatHours(calculateShiftWorkedMinutes(shift))} hrs | Break ${formatHours(calculateBreakMinutes(shift))} hrs</p>
       ${shift.notes ? `<p class="entry-note">Notes: ${escapeHtml(shift.notes)}</p>` : ""}
     `;
-
     elements.shiftTimeline.appendChild(card);
   });
 }
 
 function renderUnexportedList(currentUser) {
   const shifts = state.shifts.filter((shift) => !shift.exports.length && Boolean(shift.clockOutAt));
-  const containers = [elements.unexportedList, elements.settingsUnexportedList];
+  const containers = [elements.unexportedList, elements.settingsUnexportedList].filter(Boolean);
   containers.forEach((container) => {
     container.innerHTML = "";
   });
@@ -500,7 +533,7 @@ function buildSelectableShiftCard(shift, currentUser, variant) {
       </div>
     </div>
     <p class="entry-meta">Worked ${formatHours(calculateShiftWorkedMinutes(shift))} hours | Break ${formatHours(calculateBreakMinutes(shift))} hours</p>
-    <p class="entry-note">${buildExportHint(shift, currentUser)}</p>
+    <p class="export-hint">${buildExportHint(shift, currentUser)}</p>
     ${shift.notes ? `<p class="entry-note">Notes: ${escapeHtml(shift.notes)}</p>` : ""}
     <label class="checkbox-row">
       <input type="checkbox" value="${shift.id}" data-exported="${shift.exports.length ? "true" : "false"}" />
@@ -513,7 +546,11 @@ function buildSelectableShiftCard(shift, currentUser, variant) {
 
 function renderSettings() {
   elements.settingsDrawer.classList.toggle("hidden", !state.settingsOpen);
+  elements.settingsScrim.classList.toggle("hidden", !state.settingsOpen);
   elements.settingsDrawer.setAttribute("aria-hidden", String(!state.settingsOpen));
+
+  if (!state.currentUser) return;
+
   elements.profileSummary.textContent = `${state.currentUser.name} | ${state.currentUser.email}`;
   elements.googleStatus.textContent = "Google linking is disabled in this build for now.";
 }
@@ -528,10 +565,12 @@ function renderMessages() {
 function toggleSettings(nextState) {
   state.settingsOpen = nextState;
   elements.settingsDrawer.classList.toggle("hidden", !nextState);
+  elements.settingsScrim.classList.toggle("hidden", !nextState);
   elements.settingsDrawer.setAttribute("aria-hidden", String(!nextState));
 }
 
 function selectVisibleEntries(container, onlyUnexported) {
+  if (!container) return;
   container.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
     checkbox.checked = onlyUnexported ? checkbox.dataset.exported !== "true" : true;
   });
@@ -583,21 +622,38 @@ function calculateShiftWorkedMinutes(shift) {
   return Math.max(0, totalMinutes - calculateBreakMinutes(shift));
 }
 
-function startClockTicker() {
-  stopClockTicker();
-  state.timers.shift = window.setInterval(() => {
-    const activeShift = getActiveShift();
-    if (!activeShift) return;
-    elements.currentShiftDuration.textContent = formatDuration(calculateShiftWorkedMinutes(activeShift));
-    elements.currentBreakDuration.textContent = formatDuration(calculateBreakMinutes(activeShift));
-  }, 30000);
+function startUiTicker() {
+  if (state.timers.ui) return;
+  updateClockFaces();
+  state.timers.ui = window.setInterval(() => {
+    updateClockFaces();
+    if (state.currentUser) {
+      const activeShift = getActiveShift();
+      if (!activeShift) return;
+      elements.currentShiftDuration.textContent = formatDuration(calculateShiftWorkedMinutes(activeShift));
+      elements.currentBreakDuration.textContent = formatDuration(calculateBreakMinutes(activeShift));
+    }
+  }, 1000);
 }
 
-function stopClockTicker() {
-  if (state.timers.shift) {
-    window.clearInterval(state.timers.shift);
-    state.timers.shift = null;
-  }
+function updateClockFaces() {
+  const now = new Date();
+  const hours = now.getHours() % 12;
+  const minutes = now.getMinutes();
+  const seconds = now.getSeconds();
+  const hourRotation = hours * 30 + minutes * 0.5;
+  const minuteRotation = minutes * 6 + seconds * 0.1;
+  const secondRotation = seconds * 6;
+
+  elements.clockReadouts.forEach((node) => {
+    node.textContent = formatClockReadout(now);
+  });
+
+  elements.clockFaces.forEach((face) => {
+    face.querySelector('[data-hand="hour"]').style.transform = `rotate(${hourRotation}deg)`;
+    face.querySelector('[data-hand="minute"]').style.transform = `rotate(${minuteRotation}deg)`;
+    face.querySelector('[data-hand="second"]').style.transform = `rotate(${secondRotation}deg)`;
+  });
 }
 
 function cancelPendingNotesSave() {
@@ -605,11 +661,6 @@ function cancelPendingNotesSave() {
     window.clearTimeout(state.timers.notes);
     state.timers.notes = null;
   }
-}
-
-function stopAllTimers() {
-  stopClockTicker();
-  cancelPendingNotesSave();
 }
 
 async function apiRequest(url, options = {}) {
@@ -664,10 +715,9 @@ function formatDateTime(value) {
 
 function formatCalendarDate(value) {
   return new Intl.DateTimeFormat("en-US", {
-    weekday: "short",
+    weekday: "long",
     month: "short",
     day: "numeric",
-    year: "numeric",
   }).format(new Date(value));
 }
 
@@ -676,6 +726,13 @@ function formatTime(value) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatClockReadout(value) {
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(value);
 }
 
 function escapeHtml(value) {
