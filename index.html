@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clock Keeper</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="background-orb orb-left"></div>
+    <div class="background-orb orb-right"></div>
+
+    <main id="app" class="app-shell">
+      <section id="authView" class="panel auth-panel">
+        <div class="panel-copy">
+          <p class="eyebrow">Clock Keeper</p>
+          <h1>Track every shift, break, export, and re-export in one place.</h1>
+          <p class="lead">
+            Sign in to manage your time log locally. Your data stays in this browser
+            unless you export it.
+          </p>
+        </div>
+
+        <div class="panel-card auth-card">
+          <div class="auth-tabs" role="tablist" aria-label="Authentication tabs">
+            <button class="auth-tab active" data-tab="signin" type="button">Sign In</button>
+            <button class="auth-tab" data-tab="signup" type="button">Create Account</button>
+          </div>
+
+          <form id="signinForm" class="auth-form active" autocomplete="on">
+            <label>
+              Email
+              <input id="signinEmail" name="email" type="email" placeholder="name@example.com" required />
+            </label>
+            <label>
+              Password
+              <input id="signinPassword" name="password" type="password" placeholder="Enter password" required />
+            </label>
+            <button class="primary-btn" type="submit">Log In</button>
+          </form>
+
+          <form id="signupForm" class="auth-form" autocomplete="on">
+            <label>
+              Full name
+              <input id="signupName" name="name" type="text" placeholder="Jordan Smith" required />
+            </label>
+            <label>
+              Email
+              <input id="signupEmail" name="email" type="email" placeholder="name@example.com" required />
+            </label>
+            <label>
+              Password
+              <input id="signupPassword" name="password" type="password" minlength="6" placeholder="At least 6 characters" required />
+            </label>
+            <button class="primary-btn" type="submit">Create Account</button>
+          </form>
+
+          <p id="authMessage" class="feedback" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section id="dashboardView" class="dashboard hidden">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Time Tracker</p>
+            <h2 id="welcomeHeading">Welcome back</h2>
+          </div>
+          <button id="settingsToggle" class="ghost-btn settings-btn" type="button" aria-label="Open account settings">
+            Account Settings
+          </button>
+        </header>
+
+        <section class="hero-grid">
+          <article class="panel status-panel">
+            <div class="status-pill" id="statusPill">Off the clock</div>
+            <h3 id="statusHeadline">Ready when you are</h3>
+            <p id="statusSubtext" class="muted-text">
+              Clock in to start recording today&apos;s shift.
+            </p>
+            <div class="status-stats">
+              <div>
+                <span class="stat-label">Current shift</span>
+                <strong id="currentShiftDuration">00:00</strong>
+              </div>
+              <div>
+                <span class="stat-label">Break time</span>
+                <strong id="currentBreakDuration">00:00</strong>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel controls-panel">
+            <div class="control-row">
+              <button id="clockInBtn" class="primary-btn" type="button">Clock In</button>
+              <button id="clockOutBtn" class="danger-btn" type="button">Clock Out</button>
+            </div>
+            <div class="break-row">
+              <button class="secondary-btn break-btn" data-break-type="Lunch" type="button">Start Lunch</button>
+              <button class="secondary-btn break-btn" data-break-type="Rest" type="button">Start Short Break</button>
+              <button id="endBreakBtn" class="secondary-btn" type="button">End Break</button>
+            </div>
+            <label>
+              Shift notes
+              <textarea id="shiftNotes" rows="3" placeholder="Optional notes for this shift or employer"></textarea>
+            </label>
+          </article>
+        </section>
+
+        <section class="content-grid">
+          <article class="panel timeline-panel">
+            <div class="section-heading-row">
+              <div>
+                <p class="eyebrow">Recent Activity</p>
+                <h3>Your latest shifts</h3>
+              </div>
+            </div>
+            <div id="shiftTimeline" class="timeline-list"></div>
+          </article>
+
+          <article class="panel export-panel">
+            <div class="section-heading-row">
+              <div>
+                <p class="eyebrow">Export Queue</p>
+                <h3>Unexported entries</h3>
+              </div>
+              <button id="selectUnexportedBtn" class="ghost-btn" type="button">Select All Ready</button>
+            </div>
+            <div id="unexportedList" class="selection-list"></div>
+            <button id="exportSelectedBtn" class="primary-btn full-width" type="button">
+              Export Selected to CSV
+            </button>
+            <p id="exportFeedback" class="feedback" aria-live="polite"></p>
+          </article>
+        </section>
+      </section>
+    </main>
+
+    <aside id="settingsDrawer" class="settings-drawer hidden" aria-hidden="true">
+      <div class="settings-header">
+        <div>
+          <p class="eyebrow">Account</p>
+          <h3>Settings and exports</h3>
+        </div>
+        <button id="closeSettingsBtn" class="ghost-btn" type="button">Close</button>
+      </div>
+
+      <section class="settings-section">
+        <h4>Profile</h4>
+        <p id="profileSummary" class="muted-text"></p>
+        <button id="logoutBtn" class="ghost-btn full-width" type="button">Log Out</button>
+      </section>
+
+      <section class="settings-section">
+        <h4>Google Account Link</h4>
+        <p id="googleStatus" class="muted-text"></p>
+        <div class="stacked-actions">
+          <button id="googleLinkBtn" class="secondary-btn full-width" type="button" disabled>Link Google Account</button>
+          <button id="googleUnlinkBtn" class="ghost-btn full-width" type="button" disabled>Remove Linked Google</button>
+        </div>
+        <p class="tiny-note">
+          Google linking is intentionally disabled in this build. The rest of the app is fully backed by the server database.
+        </p>
+      </section>
+
+      <section class="settings-section">
+        <div class="section-heading-row">
+          <div>
+            <h4>Recent Unexported Entries</h4>
+            <p class="muted-text">Select any finished shifts that have not been exported yet.</p>
+          </div>
+          <button id="settingsSelectUnexportedBtn" class="ghost-btn" type="button">Select All Ready</button>
+        </div>
+        <div id="settingsUnexportedList" class="selection-list"></div>
+        <button id="settingsExportSelectedBtn" class="primary-btn full-width" type="button">
+          Export Selected to CSV
+        </button>
+        <p id="settingsExportFeedback" class="feedback" aria-live="polite"></p>
+      </section>
+
+      <section class="settings-section">
+        <div class="section-heading-row">
+          <div>
+            <h4>Past Entries</h4>
+            <p class="muted-text">Review any shift and re-export it whenever needed.</p>
+          </div>
+          <button id="selectReexportBtn" class="ghost-btn" type="button">Select All Visible</button>
+        </div>
+        <label>
+          Filter history
+          <input id="historySearch" type="search" placeholder="Search by date, status, or note" />
+        </label>
+        <div id="historyList" class="history-list"></div>
+        <button id="reexportSelectedBtn" class="secondary-btn full-width" type="button">
+          Re-Export Selected to CSV
+        </button>
+        <p id="reexportFeedback" class="feedback" aria-live="polite"></p>
+      </section>
+    </aside>
+
+    <template id="emptyStateTemplate">
+      <div class="empty-state">
+        <p>No entries yet.</p>
+      </div>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

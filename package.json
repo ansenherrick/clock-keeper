@@ -1,0 +1,9 @@
+{
+  "name": "clock-keeper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Multi-user clock in and clock out tracker with SQLite storage.",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
