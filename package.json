@@ -2,8 +2,14 @@
   "name": "clock-keeper",
   "version": "1.0.0",
   "private": true,
-  "description": "Multi-user clock in and clock out tracker with SQLite storage.",
+  "description": "Vercel-ready Express time tracker with Postgres persistence.",
+  "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "pg": "^8.16.3"
   }
 }
