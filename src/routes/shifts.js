@@ -15,6 +15,58 @@ router.get('/shifts', requireUser, async (req, res, next) => {
   }
 });
 
+router.post('/shifts/manual', requireUser, async (req, res, next) => {
+  const client = await pool.connect();
+
+  try {
+    const startAt = normalizeIsoDateTime(req.body.startAt);
+    const endAt = normalizeIsoDateTime(req.body.endAt);
+    const breakMinutes = Math.max(0, Number.parseInt(req.body.breakMinutes, 10) || 0);
+    const notes = String(req.body.notes || '').trim();
+
+    if (!startAt || !endAt) {
+      res.status(400).json({ error: 'Choose both a start and end time for the missed shift.' });
+      return;
+    }
+
+    if (new Date(endAt) <= new Date(startAt)) {
+      res.status(400).json({ error: 'The shift end time must be later than the start time.' });
+      return;
+    }
+
+    const totalMinutes = Math.round((new Date(endAt) - new Date(startAt)) / 60000);
+    if (breakMinutes >= totalMinutes) {
+      res.status(400).json({ error: 'Break minutes must be less than the total shift length.' });
+      return;
+    }
+
+    const shiftId = crypto.randomUUID();
+
+    await client.query('BEGIN');
+    await client.query(
+      'INSERT INTO shifts (id, user_id, clock_in_at, clock_out_at, notes, created_at) VALUES ($1, $2, $3, $4, $5, NOW())',
+      [shiftId, req.user.id, startAt, endAt, notes],
+    );
+
+    if (breakMinutes > 0) {
+      const breakEnd = new Date(endAt);
+      const breakStart = new Date(breakEnd.getTime() - breakMinutes * 60000);
+      await client.query(
+        'INSERT INTO breaks (id, shift_id, type, start_at, end_at) VALUES ($1, $2, $3, $4, $5)',
+        [crypto.randomUUID(), shiftId, 'Manual Break', breakStart.toISOString(), breakEnd.toISOString()],
+      );
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json({ shifts: await getShiftsForUser(req.user.id) });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    next(error);
+  } finally {
+    client.release();
+  }
+});
+
 router.post('/shifts/clock-in', requireUser, async (req, res, next) => {
   try {
     const activeShift = await getActiveShiftForUser(req.user.id);
@@ -123,3 +175,12 @@ router.patch('/shifts/:shiftId/notes', requireUser, async (req, res, next) => {
 });
 
 module.exports = router;
+
+function normalizeIsoDateTime(value) {
+  if (!value) {
+    return '';
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString();
+}

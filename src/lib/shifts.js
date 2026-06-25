@@ -56,6 +56,7 @@ async function hydrateShifts(shiftRows) {
       batchId: entry.batch_id,
       exportedAt: entry.exported_at,
       type: entry.type,
+      format: entry.format || 'csv',
     });
   }
 

@@ -197,13 +197,104 @@
       <section class="settings-section">
         <div class="panel-heading-row">
           <div>
+            <h4>Add Missed Shift</h4>
+            <p class="muted-text">Create a completed past shift before exporting payroll or invoice data.</p>
+          </div>
+        </div>
+        <form id="manualShiftForm" class="stacked-actions">
+          <label>
+            Start time
+            <input id="manualShiftStart" name="startAt" type="datetime-local" required />
+          </label>
+          <label>
+            End time
+            <input id="manualShiftEnd" name="endAt" type="datetime-local" required />
+          </label>
+          <label>
+            Break minutes
+            <input id="manualShiftBreakMinutes" name="breakMinutes" type="number" min="0" step="1" value="0" />
+          </label>
+          <label>
+            Shift notes
+            <textarea id="manualShiftNotes" name="notes" rows="3" placeholder="Optional task or work description"></textarea>
+          </label>
+          <button id="manualShiftSubmitBtn" class="primary-btn full-width" type="submit">Save Missed Shift</button>
+        </form>
+        <p id="manualShiftFeedback" class="feedback" aria-live="polite"></p>
+      </section>
+
+      <section class="settings-section">
+        <div class="panel-heading-row">
+          <div>
+            <h4>Invoice Export Defaults</h4>
+            <p class="muted-text">These fields are used when generating your <code>.invoice</code> file.</p>
+          </div>
+        </div>
+        <div class="stacked-actions">
+          <label>
+            Invoice number
+            <input id="invoiceNumber" type="text" placeholder="INV-2026-06-23" />
+          </label>
+          <label>
+            Issue date
+            <input id="invoiceIssuedOn" type="date" />
+          </label>
+          <label>
+            Due date
+            <input id="invoiceDueOn" type="date" />
+          </label>
+          <label>
+            Currency
+            <input id="invoiceCurrency" type="text" value="USD" maxlength="8" />
+          </label>
+          <label>
+            Project
+            <input id="invoiceProjectName" type="text" placeholder="Website Refresh" />
+          </label>
+          <label>
+            Client name
+            <input id="invoiceClientName" type="text" placeholder="Acme Client" />
+          </label>
+          <label>
+            Client business
+            <input id="invoiceClientBusiness" type="text" placeholder="Acme LLC" />
+          </label>
+          <label>
+            Client email
+            <input id="invoiceClientEmail" type="email" placeholder="team@acme.com" />
+          </label>
+          <label>
+            Client address
+            <textarea id="invoiceClientAddress" rows="2" placeholder="123 Main St;Suite 200"></textarea>
+          </label>
+          <label>
+            Hourly rate
+            <input id="invoiceHourlyRate" type="number" min="0" step="0.01" placeholder="85" />
+          </label>
+          <label>
+            Unit label
+            <input id="invoiceUnitLabel" type="text" value="hours" />
+          </label>
+          <label>
+            Invoice notes
+            <textarea id="invoiceNotes" rows="3" placeholder="Thanks for your business"></textarea>
+          </label>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <div class="panel-heading-row">
+          <div>
             <h4>Ready to Export</h4>
             <p class="muted-text">Select finished shifts that have not been exported yet.</p>
           </div>
           <button id="settingsSelectUnexportedBtn" class="text-btn" type="button">Select All</button>
         </div>
         <div id="settingsUnexportedList" class="selection-list"></div>
-        <button id="settingsExportSelectedBtn" class="primary-btn full-width" type="button">Export Selected to CSV</button>
+        <div class="button-pair">
+          <button id="settingsExportSelectedBtn" class="primary-btn full-width" type="button">Export CSV</button>
+          <button id="settingsExportInvoiceBtn" class="secondary-btn full-width" type="button">Export .invoice</button>
+        </div>
         <p id="settingsExportFeedback" class="feedback" aria-live="polite"></p>
       </section>
 
@@ -220,7 +311,10 @@
           <input id="historySearch" type="search" placeholder="Search by date, status, or note" />
         </label>
         <div id="historyList" class="history-list"></div>
-        <button id="reexportSelectedBtn" class="secondary-btn full-width" type="button">Re-Export Selected to CSV</button>
+        <div class="button-pair">
+          <button id="reexportSelectedBtn" class="secondary-btn full-width" type="button">Re-Export CSV</button>
+          <button id="reexportInvoiceBtn" class="ghost-btn full-width" type="button">Re-Export .invoice</button>
+        </div>
         <p id="reexportFeedback" class="feedback" aria-live="polite"></p>
       </section>
     </aside>

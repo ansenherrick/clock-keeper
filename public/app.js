@@ -12,6 +12,7 @@ const state = {
     export: "",
     settingsExport: "",
     reexport: "",
+    manualShift: "",
     general: "",
   },
 };
@@ -36,6 +37,12 @@ const elements = {
   googleStatus: document.getElementById("googleStatus"),
   googleLinkBtn: document.getElementById("googleLinkBtn"),
   googleUnlinkBtn: document.getElementById("googleUnlinkBtn"),
+  manualShiftForm: document.getElementById("manualShiftForm"),
+  manualShiftStart: document.getElementById("manualShiftStart"),
+  manualShiftEnd: document.getElementById("manualShiftEnd"),
+  manualShiftBreakMinutes: document.getElementById("manualShiftBreakMinutes"),
+  manualShiftNotes: document.getElementById("manualShiftNotes"),
+  manualShiftFeedback: document.getElementById("manualShiftFeedback"),
   statusPill: document.getElementById("statusPill"),
   statusHeadline: document.getElementById("statusHeadline"),
   statusSubtext: document.getElementById("statusSubtext"),
@@ -59,12 +66,26 @@ const elements = {
   settingsUnexportedList: document.getElementById("settingsUnexportedList"),
   settingsSelectUnexportedBtn: document.getElementById("settingsSelectUnexportedBtn"),
   settingsExportSelectedBtn: document.getElementById("settingsExportSelectedBtn"),
+  settingsExportInvoiceBtn: document.getElementById("settingsExportInvoiceBtn"),
   settingsExportFeedback: document.getElementById("settingsExportFeedback"),
   historyList: document.getElementById("historyList"),
   historySearch: document.getElementById("historySearch"),
   selectReexportBtn: document.getElementById("selectReexportBtn"),
   reexportSelectedBtn: document.getElementById("reexportSelectedBtn"),
+  reexportInvoiceBtn: document.getElementById("reexportInvoiceBtn"),
   reexportFeedback: document.getElementById("reexportFeedback"),
+  invoiceNumber: document.getElementById("invoiceNumber"),
+  invoiceIssuedOn: document.getElementById("invoiceIssuedOn"),
+  invoiceDueOn: document.getElementById("invoiceDueOn"),
+  invoiceCurrency: document.getElementById("invoiceCurrency"),
+  invoiceProjectName: document.getElementById("invoiceProjectName"),
+  invoiceClientName: document.getElementById("invoiceClientName"),
+  invoiceClientBusiness: document.getElementById("invoiceClientBusiness"),
+  invoiceClientEmail: document.getElementById("invoiceClientEmail"),
+  invoiceClientAddress: document.getElementById("invoiceClientAddress"),
+  invoiceHourlyRate: document.getElementById("invoiceHourlyRate"),
+  invoiceUnitLabel: document.getElementById("invoiceUnitLabel"),
+  invoiceNotes: document.getElementById("invoiceNotes"),
   emptyStateTemplate: document.getElementById("emptyStateTemplate"),
 };
 
@@ -94,6 +115,7 @@ function bindEvents() {
   elements.settingsScrim.addEventListener("click", () => toggleSettings(false));
   elements.openHistoryBtn.addEventListener("click", () => toggleSettings(true));
   elements.logoutBtn.addEventListener("click", handleLogout);
+  elements.manualShiftForm.addEventListener("submit", handleManualShiftCreate);
   elements.clockInBtn.addEventListener("click", handleClockIn);
   elements.clockOutBtn.addEventListener("click", handleClockOut);
   elements.endBreakBtn.addEventListener("click", handleEndBreak);
@@ -106,9 +128,11 @@ function bindEvents() {
   }
 
   elements.settingsSelectUnexportedBtn.addEventListener("click", () => selectVisibleEntries(elements.settingsUnexportedList, true));
-  elements.settingsExportSelectedBtn.addEventListener("click", () => exportSelectedEntries(elements.settingsUnexportedList, "initial-export", "settingsExport"));
+  elements.settingsExportSelectedBtn.addEventListener("click", () => exportSelectedEntries(elements.settingsUnexportedList, "initial-export", "csv", "settingsExport"));
+  elements.settingsExportInvoiceBtn.addEventListener("click", () => exportSelectedEntries(elements.settingsUnexportedList, "initial-export", "invoice", "settingsExport"));
   elements.selectReexportBtn.addEventListener("click", () => selectVisibleEntries(elements.historyList, false));
-  elements.reexportSelectedBtn.addEventListener("click", () => exportSelectedEntries(elements.historyList, "re-export", "reexport"));
+  elements.reexportSelectedBtn.addEventListener("click", () => exportSelectedEntries(elements.historyList, "re-export", "csv", "reexport"));
+  elements.reexportInvoiceBtn.addEventListener("click", () => exportSelectedEntries(elements.historyList, "re-export", "invoice", "reexport"));
   elements.historySearch.addEventListener("input", renderHistoryList);
   elements.shiftNotes.addEventListener("input", scheduleShiftNotesSave);
 
@@ -218,6 +242,7 @@ async function handleLogout() {
     export: "",
     settingsExport: "",
     reexport: "",
+    manualShift: "",
     general: "",
   };
   render();
@@ -303,6 +328,33 @@ async function handleEndBreak() {
   }
 }
 
+async function handleManualShiftCreate(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const formData = new FormData(form);
+
+  try {
+    const response = await apiRequest("/api/shifts/manual", {
+      method: "POST",
+      body: {
+        startAt: String(formData.get("startAt") || ""),
+        endAt: String(formData.get("endAt") || ""),
+        breakMinutes: String(formData.get("breakMinutes") || "0"),
+        notes: String(formData.get("notes") || ""),
+      },
+    });
+
+    state.shifts = response.shifts;
+    state.statusMessages.manualShift = "Missed shift saved.";
+    form.reset();
+    seedManualShiftDefaults();
+    render();
+  } catch (error) {
+    state.statusMessages.manualShift = error.message;
+    renderMessages();
+  }
+}
+
 function scheduleShiftNotesSave(event) {
   const activeShift = getActiveShift();
   if (!activeShift) return;
@@ -324,7 +376,7 @@ function scheduleShiftNotesSave(event) {
   }, 500);
 }
 
-async function exportSelectedEntries(sourceElement, exportType, messageKey) {
+async function exportSelectedEntries(sourceElement, exportType, format, messageKey) {
   const checked = Array.from(sourceElement.querySelectorAll('input[type="checkbox"]:checked'));
   if (!checked.length) {
     state.statusMessages[messageKey] = "Select at least one entry before exporting.";
@@ -338,12 +390,14 @@ async function exportSelectedEntries(sourceElement, exportType, messageKey) {
       body: {
         shiftIds: checked.map((input) => input.value),
         type: exportType,
+        format,
+        invoice: format === "invoice" ? collectInvoiceOptions() : undefined,
       },
     });
 
-    downloadCsv(response.csv, response.filename);
+    downloadFile(response.content, response.filename, response.mimeType);
     state.shifts = response.shifts;
-    state.statusMessages[messageKey] = `${response.exportedCount} entr${response.exportedCount === 1 ? "y was" : "ies were"} exported.`;
+    state.statusMessages[messageKey] = `${response.exportedCount} entr${response.exportedCount === 1 ? "y was" : "ies were"} exported as ${format === "invoice" ? ".invoice" : "CSV"}.`;
     render();
   } catch (error) {
     state.statusMessages[messageKey] = error.message;
@@ -553,6 +607,8 @@ function renderSettings() {
 
   elements.profileSummary.textContent = `${state.currentUser.name} | ${state.currentUser.email}`;
   elements.googleStatus.textContent = "Google linking is disabled in this build for now.";
+  seedManualShiftDefaults();
+  seedInvoiceDefaults();
 }
 
 function renderMessages() {
@@ -560,6 +616,7 @@ function renderMessages() {
   elements.exportFeedback.textContent = state.statusMessages.export;
   elements.settingsExportFeedback.textContent = state.statusMessages.settingsExport;
   elements.reexportFeedback.textContent = state.statusMessages.reexport;
+  elements.manualShiftFeedback.textContent = state.statusMessages.manualShift;
 }
 
 function toggleSettings(nextState) {
@@ -580,6 +637,7 @@ function clearFeedbackMessages() {
   state.statusMessages.export = "";
   state.statusMessages.settingsExport = "";
   state.statusMessages.reexport = "";
+  state.statusMessages.manualShift = "";
 }
 
 function getActiveShift() {
@@ -604,7 +662,8 @@ function buildExportHint(shift, currentUser) {
     return `Ready to export for ${currentUser.name}.`;
   }
   const latest = shift.exports[shift.exports.length - 1];
-  return `Last ${latest.type} at ${formatDateTime(latest.exportedAt)}.`;
+  const formatLabel = latest.format === "invoice" ? ".invoice" : "CSV";
+  return `Last ${latest.type} ${formatLabel} at ${formatDateTime(latest.exportedAt)}.`;
 }
 
 function calculateBreakMinutes(shift) {
@@ -684,8 +743,8 @@ async function apiRequest(url, options = {}) {
   return data;
 }
 
-function downloadCsv(content, filename) {
-  const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+function downloadFile(content, filename, mimeType) {
+  const blob = new Blob([content], { type: mimeType || "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -748,4 +807,69 @@ function cloneEmptyState(message = "No entries yet.") {
   const node = elements.emptyStateTemplate.content.firstElementChild.cloneNode(true);
   node.querySelector("p").textContent = message;
   return node;
+}
+
+function collectInvoiceOptions() {
+  return {
+    invoiceNumber: elements.invoiceNumber.value.trim(),
+    issuedOn: elements.invoiceIssuedOn.value,
+    dueOn: elements.invoiceDueOn.value,
+    currency: elements.invoiceCurrency.value.trim().toUpperCase() || "USD",
+    projectName: elements.invoiceProjectName.value.trim(),
+    clientName: elements.invoiceClientName.value.trim(),
+    clientBusiness: elements.invoiceClientBusiness.value.trim(),
+    clientEmail: elements.invoiceClientEmail.value.trim(),
+    clientAddress: elements.invoiceClientAddress.value.trim(),
+    hourlyRate: elements.invoiceHourlyRate.value.trim(),
+    unitLabel: elements.invoiceUnitLabel.value.trim() || "hours",
+    notes: elements.invoiceNotes.value.trim(),
+  };
+}
+
+function seedManualShiftDefaults() {
+  if (elements.manualShiftStart.value || elements.manualShiftEnd.value) {
+    return;
+  }
+
+  const now = new Date();
+  const start = new Date(now);
+  start.setHours(9, 0, 0, 0);
+  const end = new Date(now);
+  end.setHours(17, 0, 0, 0);
+  elements.manualShiftStart.value = formatDateTimeLocalInput(start);
+  elements.manualShiftEnd.value = formatDateTimeLocalInput(end);
+}
+
+function seedInvoiceDefaults() {
+  const today = formatDateInput(new Date());
+  if (!elements.invoiceIssuedOn.value) {
+    elements.invoiceIssuedOn.value = today;
+  }
+  if (!elements.invoiceDueOn.value) {
+    const due = new Date();
+    due.setDate(due.getDate() + 7);
+    elements.invoiceDueOn.value = formatDateInput(due);
+  }
+  if (!elements.invoiceCurrency.value) {
+    elements.invoiceCurrency.value = "USD";
+  }
+  if (!elements.invoiceUnitLabel.value) {
+    elements.invoiceUnitLabel.value = "hours";
+  }
+}
+
+function formatDateInput(value) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatDateTimeLocalInput(value) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  const hours = String(value.getHours()).padStart(2, "0");
+  const minutes = String(value.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
 }

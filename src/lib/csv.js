@@ -50,10 +50,63 @@ function buildCsv(shifts, user, exportedAt, exportType) {
   return [headers, ...rows].map((row) => row.map(csvEscape).join(',')).join('\n');
 }
 
-function buildExportFileName(name, exportType, exportedAt) {
+function buildInvoice(shifts, user, exportedAt, invoiceOptions = {}) {
+  const issuedOn = invoiceOptions.issuedOn || formatDateOnly(exportedAt);
+  const dueOn = invoiceOptions.dueOn || addDays(issuedOn, Number(invoiceOptions.dueInDays || 7));
+  const invoiceNumber = invoiceOptions.invoiceNumber || buildInvoiceNumber(issuedOn);
+  const currency = invoiceOptions.currency || 'USD';
+  const projectName = invoiceOptions.projectName || '';
+  const clientName = invoiceOptions.clientName || user.name;
+  const clientBusiness = invoiceOptions.clientBusiness || '';
+  const clientEmail = invoiceOptions.clientEmail || '';
+  const clientAddress = invoiceOptions.clientAddress || '';
+  const notes = invoiceOptions.notes || 'Clock Keeper export';
+  const hourlyRate = normalizeMoney(invoiceOptions.hourlyRate);
+
+  const lines = [
+    'INVC1',
+    `inv=${escapeInvoiceValue(invoiceNumber)}`,
+    `iss=${escapeInvoiceValue(issuedOn)}`,
+    `due=${escapeInvoiceValue(dueOn)}`,
+    `cur=${escapeInvoiceValue(currency)}`,
+    `prj=${escapeInvoiceValue(projectName)}`,
+    `cn=${escapeInvoiceValue(clientName)}`,
+    `cb=${escapeInvoiceValue(clientBusiness)}`,
+    `ce=${escapeInvoiceValue(clientEmail)}`,
+    `ca=${escapeInvoiceValue(clientAddress)}`,
+    'txr=0',
+    'txa=',
+    'dsc=0',
+    `nts=${escapeInvoiceValue(notes)}`,
+  ];
+
+  for (const shift of shifts) {
+    const workedHours = (calculateShiftWorkedMinutes(shift) / 60).toFixed(2);
+    const itemTask = shift.notes || projectName || `Shift on ${formatDateOnly(shift.clockInAt)}`;
+    const itemNotes = shift.notes
+      ? `Clock Keeper export - ${shift.notes}`
+      : 'Clock Keeper export';
+
+    lines.push(
+      `it=${[
+        escapeInvoiceValue(itemTask),
+        workedHours,
+        hourlyRate,
+        escapeInvoiceValue(invoiceOptions.unitLabel || 'hours'),
+        formatDateOnly(shift.clockInAt),
+        escapeInvoiceValue(itemNotes),
+      ].join('|')}`,
+    );
+  }
+
+  return lines.join('\n');
+}
+
+function buildExportFileName(name, exportType, exportedAt, format = 'csv') {
   const safeName = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'employee';
   const stamp = exportedAt.replace(/[:.]/g, '-');
-  return `${safeName}-${exportType === 're-export' ? 'reexport' : 'export'}-${stamp}.csv`;
+  const suffix = exportType === 're-export' ? 'reexport' : 'export';
+  return `${safeName}-${suffix}-${stamp}.${format === 'invoice' ? 'invoice' : 'csv'}`;
 }
 
 function calculateBreakMinutes(shift) {
@@ -110,8 +163,31 @@ function csvEscape(value) {
   return `"${String(value ?? '').replaceAll('"', '""')}"`;
 }
 
+function buildInvoiceNumber(issuedOn) {
+  return `INV-${issuedOn}`;
+}
+
+function normalizeMoney(value) {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount.toFixed(2).replace(/\.00$/, '') : '0';
+}
+
+function escapeInvoiceValue(value) {
+  return String(value ?? '')
+    .replaceAll('\n', '; ')
+    .replaceAll('\r', '')
+    .replaceAll('|', '/');
+}
+
+function addDays(isoDate, daysToAdd) {
+  const base = new Date(`${isoDate}T00:00:00.000Z`);
+  base.setUTCDate(base.getUTCDate() + (Number.isFinite(daysToAdd) ? daysToAdd : 7));
+  return formatDateOnly(base.toISOString());
+}
+
 module.exports = {
   buildCsv,
+  buildInvoice,
   buildExportFileName,
   calculateBreakMinutes,
   calculateShiftWorkedMinutes,

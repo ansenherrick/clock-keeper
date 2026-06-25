@@ -57,8 +57,12 @@ const schemaSql = `
     shift_id UUID NOT NULL REFERENCES shifts(id) ON DELETE CASCADE,
     batch_id UUID NOT NULL,
     exported_at TIMESTAMPTZ NOT NULL,
-    type TEXT NOT NULL
+    type TEXT NOT NULL,
+    format TEXT NOT NULL DEFAULT 'csv'
   );
+
+  ALTER TABLE shift_exports
+  ADD COLUMN IF NOT EXISTS format TEXT NOT NULL DEFAULT 'csv';
 `;
 
 let schemaReadyPromise;
